@@ -1,175 +1,96 @@
 #!/bin/bash
+# X-UI Management Script - Customized for Hyper-21-stack Repository
 
-# Global Variables
-LOG_FILE="/var/log/x-ui-install.log"
-PORT_MIN=1
-PORT_MAX=65535
+# Variables
+REPO_URL="https://raw.githubusercontent.com/Hyper-21-stack/x-ui/main/install.sh"
+X_UI_BIN="/usr/local/bin/x-ui"
 
-# Function for logging errors
-LOGE() {
-    echo "[ERROR] $(date) $1" >> "$LOG_FILE"
+# Functions
+install_x_ui() {
+    echo "Installing x-ui..."
+    bash <(curl -Ls $REPO_URL)
+    echo "Installation completed."
 }
 
-# Function for logging success
-LOGS() {
-    echo "[INFO] $(date) $1" >> "$LOG_FILE"
+update_x_ui() {
+    echo "Updating x-ui..."
+    bash <(curl -Ls $REPO_URL)
+    echo "Update completed."
 }
 
-# Function to check for root privileges
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        LOGE "This script must be run as root"
-        exit 1
-    fi
+start_x_ui() {
+    echo "Starting x-ui..."
+    systemctl start x-ui
 }
 
-# Function to check for required dependencies
-check_dependencies() {
-    LOGS "Checking for required dependencies..."
-
-    # Check if curl is installed
-    if ! command -v curl &>/dev/null; then
-        LOGE "curl is required but not installed"
-        exit 1
-    fi
-
-    # Check if systemctl is available (systemd check)
-    if ! command -v systemctl &>/dev/null; then
-        LOGE "systemd is required but not installed"
-        exit 1
-    fi
-
-    LOGS "All dependencies are met."
+stop_x_ui() {
+    echo "Stopping x-ui..."
+    systemctl stop x-ui
 }
 
-# Function to detect the OS
-detect_os() {
-    LOGS "Detecting operating system..."
-
-    if [ -f /etc/os-release ]; then
-        source /etc/os-release
-        OS_NAME=$ID
-        OS_VERSION=$VERSION_ID
-    else
-        LOGE "Cannot detect the operating system."
-        exit 1
-    fi
-
-    LOGS "Detected OS: $OS_NAME $OS_VERSION"
+restart_x_ui() {
+    echo "Restarting x-ui..."
+    systemctl restart x-ui
 }
 
-# Function to handle the port input and validation
-set_port() {
-    read -p "Enter port number [$PORT_MIN-$PORT_MAX]: " port
-
-    if ! [[ "$port" =~ ^[0-9]+$ ]] || ((port < PORT_MIN || port > PORT_MAX)); then
-        LOGE "Invalid port number entered. It should be between $PORT_MIN and $PORT_MAX."
-        exit 1
-    fi
-
-    LOGS "Using port $port."
+status_x_ui() {
+    echo "Checking x-ui status..."
+    systemctl status x-ui
 }
 
-# Function to install x-ui panel
-install() {
-    LOGS "Starting installation of x-ui..."
-
-    # Install necessary dependencies
-    apt-get update && apt-get install -y curl wget unzip
-
-    # Download the installation script
-    curl -sSL https://github.com/vaxilu/x-ui/releases/download/v0.9.1/install.sh -o install.sh
-
-    # Run the installation script
-    bash install.sh
-
-    if [ $? -ne 0 ]; then
-        LOGE "Installation failed."
-        exit 1
-    fi
-
-    LOGS "x-ui panel installed successfully."
+reset_x_ui() {
+    echo "Resetting x-ui user credentials..."
+    $X_UI_BIN default
 }
 
-# Function to uninstall x-ui panel
-uninstall() {
-    LOGS "Uninstalling x-ui panel..."
-
-    # Run uninstall script
-    bash /usr/local/x-ui/uninstall.sh
-
-    if [ $? -ne 0 ]; then
-        LOGE "Uninstallation failed."
-        exit 1
-    fi
-
-    LOGS "x-ui panel uninstalled successfully."
+change_port_x_ui() {
+    read -p "Enter new port: " new_port
+    $X_UI_BIN set-port $new_port
+    systemctl restart x-ui
+    echo "Port changed to $new_port."
 }
 
-# Function to update x-ui panel
-update() {
-    LOGS "Updating x-ui panel..."
-
-    # Download and run update script
-    curl -sSL https://github.com/vaxilu/x-ui/releases/latest/download/update.sh -o update.sh
-    bash update.sh
-
-    if [ $? -ne 0 ]; then
-        LOGE "Update failed."
-        exit 1
-    fi
-
-    LOGS "x-ui panel updated successfully."
+setup_ssl_x_ui() {
+    read -p "Enter domain: " domain
+    $X_UI_BIN set-cert $domain
+    systemctl restart x-ui
+    echo "SSL certificate configured for $domain."
 }
 
-# Function to manage SSL certificate issuance
-ssl_cert_issue() {
-    LOGS "Issuing SSL certificate..."
-
-    # Install acme.sh if not already installed
-    if ! command -v acme.sh &>/dev/null; then
-        curl https://get.acme.sh | bash
-    fi
-
-    # Issue SSL certificate
-    ~/.acme.sh/acme.sh --issue -d yourdomain.com --standalone --preferred-chain "ISRG Root X1"
-
-    if [ $? -ne 0 ]; then
-        LOGE "SSL certificate issuance failed."
-        exit 1
-    fi
-
-    LOGS "SSL certificate issued successfully."
+install_bbr() {
+    echo "Installing TCP BBR..."
+    echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
+    echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+    sysctl -p
+    echo "BBR installation completed."
 }
 
-# Main Menu
-main_menu() {
-    clear
-    echo "Choose an action:"
-    echo "1. Install x-ui panel"
-    echo "2. Uninstall x-ui panel"
-    echo "3. Update x-ui panel"
-    echo "4. Issue SSL certificate"
-    echo "5. Exit"
+# Menu
+echo "Select an option:"
+echo "1) Install x-ui"
+echo "2) Update x-ui"
+echo "3) Start x-ui"
+echo "4) Stop x-ui"
+echo "5) Restart x-ui"
+echo "6) Check status"
+echo "7) Reset credentials"
+echo "8) Change port"
+echo "9) Setup SSL certificate"
+echo "10) Install BBR"
+echo "0) Exit"
+read -p "Enter choice: " choice
 
-    read -p "Select an option (1-5): " choice
-
-    case $choice in
-        1) install ;;
-        2) uninstall ;;
-        3) update ;;
-        4) ssl_cert_issue ;;
-        5) exit 0 ;;
-        *) 
-            LOGE "Invalid option selected."
-            exit 1
-            ;;
-    esac
-}
-
-# Main script execution
-check_root
-check_dependencies
-detect_os
-set_port
-main_menu
+case $choice in
+    1) install_x_ui ;;
+    2) update_x_ui ;;
+    3) start_x_ui ;;
+    4) stop_x_ui ;;
+    5) restart_x_ui ;;
+    6) status_x_ui ;;
+    7) reset_x_ui ;;
+    8) change_port_x_ui ;;
+    9) setup_ssl_x_ui ;;
+    10) install_bbr ;;
+    0) exit 0 ;;
+    *) echo "Invalid choice!" ;;
+esac
